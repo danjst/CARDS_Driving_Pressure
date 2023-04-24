@@ -1,0 +1,70 @@
+```{r}
+static_demographics = read.csv("static_demographics_2023.csv")
+
+jmbayes_longitudinal_data = read.csv("longitudinal_data.csv")
+
+```
+
+Fitting linear mixed effects (lme) models for each longitudinal variable
+```{r}
+
+fm1_4 <- lme(driving_pressure ~ ns(vent_hour,4), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,4) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm1_43 <- lme(driving_pressure ~ ns(vent_hour,4), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,3) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm1_34 <- lme(driving_pressure ~ ns(vent_hour,3), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,4) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm1_23 <- lme(driving_pressure ~ ns(vent_hour,2), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,3) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm1_32 <- lme(driving_pressure ~ ns(vent_hour,3), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,2) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+
+fm2_3 <- lme(oxygen_saturation ~ ns(vent_hour,3), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,3) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm3_3 <- lme(respiratory_rate ~ ns(vent_hour,3), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,3) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm3_2 <- lme(respiratory_rate ~ ns(vent_hour,2), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,2) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm4pbw_2 <- lme(tv_pbw ~ ns(vent_hour,2), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,2) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm4pbw_3 <- lme(tv_pbw ~ ns(vent_hour,3), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,3) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+fm5_2 <- lme(pf_ratio ~ ns(vent_hour,2), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,2) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+
+fm6_2 <- lme(PaCO2 ~ ns(vent_hour,2), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,2) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+
+fm7_2 <- lme(arterial_ph_standard~ ns(vent_hour,2), data = jmbayes_longitudinal_data, random = ~ ns(vent_hour,2) | patient_id, control = lmeControl(opt = "optim"), na.action = na.exclude)
+
+
+static_demographics = subset(static_demographics,origEMPI %in% unique(jmbayes_longitudinal_data$origEMPI))
+cox_variables= c("Gender","AgeYearsIntRound","Race","BMI","Charlson1")
+
+true_formula=as.formula(paste("Surv(hours, status)~", paste(cox_variables, collapse="+")))
+
+CoxFit <- coxph(true_formula, data = static_demographics, model = TRUE)
+
+```
+
+
+Running Joint Models
+```{r}
+
+jointFit1_544_jun22_value<-  jm(CoxFit, list(fm1_4,fm2_3,fm3_3,fm4pbw_3,fm5_2,fm6_2,fm7_2) ,time_var = "vent_hour", n_iter=2000)
+paste('Value WAIC',round(jointFit1_544_jun22_value[["fit_stats"]][["marginal"]][["WAIC"]]))
+
+
+fForms <- list(
+  "driving_pressure" = ~ value(driving_pressure) + slope(driving_pressure))
+
+jointFit1_544_jun22_value_slope<- update(jointFit1_544_jun22_value, functional_forms=fForms, n_iter=2000)
+paste('Value Slope WAIC',round(jointFit1_544_jun22_value_slope[["fit_stats"]][["marginal"]][["WAIC"]]))
+
+fForms <- list(
+  "driving_pressure" = ~ area(driving_pressure)
+)
+jointFit1_544_jun22_area<- update(jointFit1_544_jun22_value, functional_forms=fForms,n_iter=2000)
+paste('Area WAIC',round(jointFit1_544_jun22_area[["fit_stats"]][["marginal"]][["WAIC"]]))
+```
+
