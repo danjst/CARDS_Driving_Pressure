@@ -1,0 +1,376 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Summarizing Joint Model Table
+
+```{r}
+library(berryFunctions)
+
+```
+
+```{r}
+# creating final results table 
+jm_df_edit = data.frame(summary(jointFit_544_jun22_value_univariate_dphours)$Survival)
+#rownames(jm_df_edit)[15:20] = c("driving_pressure","oxygen_saturation","respiratory_rate","tidal_volume","pf_ratio","PaCO2")
+jm_df_edit$HR = exp(jm_df_edit$Mean)
+jm_df_edit$HR2.5 = exp(jm_df_edit$X2.5.)
+jm_df_edit$HR97.5 = exp(jm_df_edit$X97.5.)
+jm_df_edit$P = round(jm_df_edit$P,3)
+jm_df_edit$HR_total = paste(round(jm_df_edit$HR,3),"(",round(jm_df_edit$HR2.5,3),"-",round(jm_df_edit$HR97.5,3),")")
+
+jm_df_edit = jm_df_edit[,c("HR_total","P")]
+colnames(jm_df_edit) = c("HR_jm","jm_pval")
+
+for (i in 1:nrow(jm_df_edit)){
+  if ((jm_df_edit$jm_pval[i]>=0) & (jm_df_edit$jm_pval[i]<0.001)){
+    jm_df_edit$jm_sig[i] = "***"
+  }else if ((jm_df_edit$jm_pval[i]>=0.001) & (jm_df_edit$jm_pval[i]<0.01)){
+    jm_df_edit$jm_sig[i] = "**"
+    } else if ((jm_df_edit$jm_pval[i]>=0.01) & (jm_df_edit$jm_pval[i]<0.05)){
+    jm_df_edit$jm_sig[i] = "*"
+  } else {jm_df_edit$jm_sig[i]=" "}
+}
+
+#oldnames = c("VENT_RESP_RATE","PULS_OXIM_SAT_O2","VENT_VOL_TIDAL","LastBodyMassINdexNBR")
+#newnames = c("respiratory_rate","oxygen_saturation","tidal_volume","BMI")
+#final_df= final_df %>% rename_at(vars(oldnames), ~ newnames)
+
+#jm_df_edit = jm_df_edit[c(1:5,13:14,6:12,15:nrow(jm_df_edit)),]
+
+
+colnames(jm_df_edit)[1:2] = c("HR (95% CI)","p Value")
+reference_row= c("1 [Reference]","NA",NA)
+
+jm_df_edit = insertRows(jm_df_edit,c(1,4),new=reference_row)
+
+
+title_row = c(NA,NA,NA)
+
+jm_df_edit = insertRows(jm_df_edit,c(1,4,6,11,13,16),new=title_row)
+
+#jm_row_names = c("Gender","Female","Male","Age","Age (years)","Race","White","Black","Asian","Unknown/Other","Ethnicity","Hispanic","Non-Hispanic","Unknown","BMI","BMI (kg/m2)","Comorbidities","Charlson Comorbidity Index","Chronic Kidney Disease", "Diabetes","Chronic Liver Disease","Cardiovascular Disease","Hypertension","Time-varying Biomarkers","Driving Pressure (cm H2O)","slope(Driving Pressure) (cmH2O/hr)",'AUC(Driving Pressure)',"SpO2 (%)","Respiratory Rate (breaths/ml)","Tidal Volume (mL)","PF Ratio","PaCO2 (mmHg)")
+
+#jm_row_names = c("Gender","Female","Male","Age","Age (years)","Race","White","Black","Asian","Unknown/Other","BMI","BMI (kg/m2)","Comorbidities","Charlson Comorbidity Index","Time-varying Biomarkers","Driving Pressure (cm H2O)","slope(Driving Pressure) (cmH2O/hr)",'Normalized AUC(Driving Pressure)',"SpO2 (%)","Respiratory Rate (breaths/ml)","TV/PBW (mL/kg)","PF Ratio (mmHg)","PaCO2", "Arterial pH")
+
+#jm_row_names = c("Gender","Female","Male","Age","Age (years)","Race","White","Black","Asian","Unknown/Other","BMI","BMI (kg/m2)","Comorbidities","Charlson Comorbidity Index","Time-varying Biomarkers","Driving Pressure (cm H2O)","slope(Driving Pressure) (cmH2O/hr)",'Normalized AUC(Driving Pressure)')
+
+jm_row_names = c("Gender","Female","Male","Age","Age (years)","Race","White","Black","Asian","Unknown/Other","BMI","BMI (kg/m2)","Comorbidities","Charlson Comorbidity Index","Baseline PF Ratio","Time-varying Biomarkers","Driving Pressure (cm H2O)","slope(Driving Pressure) (cmH2O/hr)",'Normalized AUC(Driving Pressure)')
+
+other_vars_row = c(NA,NA,NA)
+
+```
+
+Value only
+```{r}
+
+jm_df_edit = insertRows(jm_df_edit,c(18,19),new=other_vars_row)
+
+jm_df_edit = jm_df_edit[-c(19),]
+row.names(jm_df_edit) = jm_row_names
+
+value_df2 = jm_df_edit
+value_df = cbind(value_df,value_df2)
+write.csv(value_df, "value_only_univariate.csv")
+
+```
+
+Value + Slope
+```{r}
+
+jm_df_edit = insertRows(jm_df_edit,c(18),new=other_vars_row)
+
+jm_df_edit = jm_df_edit[-c(19),]
+row.names(jm_df_edit) = jm_row_names
+
+value_slope_df = jm_df_edit
+#write.csv(value_slope_df, "value_slope.csv")
+
+```
+
+Area
+```{r}
+
+jm_df_edit = insertRows(jm_df_edit,c(16,17),new=other_vars_row)
+row.names(jm_df_edit) = jm_row_names
+area_df = jm_df_edit
+#write.csv(area_df, "area.csv")
+
+```
+
+```{r}
+value_only = jointFit1_544_jun22_value
+value_slope = jointFit1_544_jun22_value_slope
+area = value_only = jointFit1_544_jun22_area
+
+waics = c(value_only[["fit_stats"]][["marginal"]][["WAIC"]],value_slope[["fit_stats"]][["marginal"]][["WAIC"]],area[["fit_stats"]][["marginal"]][["WAIC"]])
+
+dics = c(value_only[["fit_stats"]][["marginal"]][["DIC"]],value_slope[["fit_stats"]][["marginal"]][["DIC"]],area[["fit_stats"]][["marginal"]][["DIC"]])
+
+lpml = c(value_only[["fit_stats"]][["marginal"]][["LPML"]],value_slope[["fit_stats"]][["marginal"]][["LPML"]],area[["fit_stats"]][["marginal"]][["LPML"]])
+
+jm_fit_metrics=rbind(waics,dics,lpml)
+colnames(jm_fit_metrics) = c("Current Value", "Current Value + Slope", "Normalized Area")
+
+write.csv(jm_fit_metrics,"jm_fit_metrics.csv")
+
+final_jm_summary_table = data.frame(cbind(value_df,value_slope_df,area_df))
+final_jm_summary_table
+write.csv(final_jm_summary_table,"final_jm_summary_table.csv")
+```
+
+WAIC and DIC
+
+```{r}
+
+paste('Value WAIC',round(jointFit_spline3_572_value[["fit_stats"]][["marginal"]][["WAIC"]]))
+paste('Value DIC',round(jointFit_spline3_572_value[["fit_stats"]][["marginal"]][["DIC"]]))
+paste('Value LPML',round(jointFit_spline3_572_value[["fit_stats"]][["marginal"]][["LPML"]]))
+
+paste('Value Slope WAIC',round(jointFit_spline3_572_value_slope[["fit_stats"]][["marginal"]][["WAIC"]]))
+paste('Value Slope DIC',round(jointFit_spline3_572_value_slope[["fit_stats"]][["marginal"]][["DIC"]]))
+paste('Value Slope LPML',round(jointFit_spline3_572_value_slope[["fit_stats"]][["marginal"]][["LPML"]]))
+
+paste('Area WAIC',round(jointFit_spline3_572_area[["fit_stats"]][["marginal"]][["WAIC"]]))
+paste('Area DIC',round(jointFit_spline3_572_area[["fit_stats"]][["marginal"]][["DIC"]]))
+paste('Area LPML',round(jointFit_spline3_572_area[["fit_stats"]][["marginal"]][["LPML"]]))
+
+```
+
+# small tables (driving pressure only)
+
+
+```{r}
+# creating final results table 
+jm_df_edit = data.frame(summary(jointFit13_545_jun19_area)$Survival)
+#rownames(jm_df_edit)[15:20] = c("driving_pressure","oxygen_saturation","respiratory_rate","tidal_volume","pf_ratio","PaCO2")
+jm_df_edit$HR = exp(jm_df_edit$Mean)
+jm_df_edit$HR2.5 = exp(jm_df_edit$X2.5.)
+jm_df_edit$HR97.5 = exp(jm_df_edit$X97.5.)
+jm_df_edit$P = round(jm_df_edit$P,3)
+jm_df_edit$HR_total = paste(round(jm_df_edit$HR,3),"(",round(jm_df_edit$HR2.5,3),"-",round(jm_df_edit$HR97.5,3),")")
+
+jm_df_edit = jm_df_edit[,c("HR_total","P")]
+colnames(jm_df_edit) = c("HR_jm","jm_pval")
+
+for (i in 1:nrow(jm_df_edit)){
+  if ((jm_df_edit$jm_pval[i]>=0) & (jm_df_edit$jm_pval[i]<0.001)){
+    jm_df_edit$jm_sig[i] = "***"
+  }else if ((jm_df_edit$jm_pval[i]>=0.001) & (jm_df_edit$jm_pval[i]<0.01)){
+    jm_df_edit$jm_sig[i] = "**"
+    } else if ((jm_df_edit$jm_pval[i]>=0.01) & (jm_df_edit$jm_pval[i]<0.05)){
+    jm_df_edit$jm_sig[i] = "*"
+  } else {jm_df_edit$jm_sig[i]=" "}
+}
+
+#oldnames = c("VENT_RESP_RATE","PULS_OXIM_SAT_O2","VENT_VOL_TIDAL","LastBodyMassINdexNBR")
+#newnames = c("respiratory_rate","oxygen_saturation","tidal_volume","BMI")
+#final_df= final_df %>% rename_at(vars(oldnames), ~ newnames)
+
+#jm_df_edit = jm_df_edit[c(1:5,13:14,6:12,15:nrow(jm_df_edit)),]
+
+
+colnames(jm_df_edit)[1:2] = c("HR (95% CI)","p Value")
+reference_row= c("1 [Reference]","NA",NA)
+
+jm_df_edit = insertRows(jm_df_edit,c(1,4),new=reference_row)
+
+
+title_row = c(NA,NA,NA)
+
+jm_df_edit = insertRows(jm_df_edit,c(1,4,6,11,13,15),new=title_row)
+
+#jm_row_names = c("Gender","Female","Male","Age","Age (years)","Race","White","Black","Asian","Unknown/Other","Ethnicity","Hispanic","Non-Hispanic","Unknown","BMI","BMI (kg/m2)","Comorbidities","Charlson Comorbidity Index","Chronic Kidney Disease", "Diabetes","Chronic Liver Disease","Cardiovascular Disease","Hypertension","Time-varying Biomarkers","Driving Pressure (cm H2O)","slope(Driving Pressure) (cmH2O/hr)",'AUC(Driving Pressure)',"SpO2 (%)","Respiratory Rate (breaths/ml)","Tidal Volume (mL)","PF Ratio","PaCO2 (mmHg)")
+
+jm_row_names = c("Gender","Female","Male","Age","Age (years)","Race","White","Black","Asian","Unknown/Other","BMI","BMI (kg/m2)","Comorbidities","Charlson Comorbidity Index","Time-varying Biomarkers","Driving Pressure (cm H2O)","slope(Driving Pressure) (cmH2O/hr)",'Normalized AUC(Driving Pressure)')
+
+other_vars_row = c(NA,NA,NA)
+
+```
+
+
+Value only
+```{r}
+
+jm_df_edit = insertRows(jm_df_edit,c(17,18),new=other_vars_row)
+
+jm_df_edit = jm_df_edit[-17,]
+row.names(jm_df_edit) = jm_row_names
+
+value_df = jm_df_edit
+#write.csv(value_df, "value_only.csv")
+
+```
+
+Value + Slope
+```{r}
+
+jm_df_edit = insertRows(jm_df_edit,c(18),new=other_vars_row)
+jm_df_edit = jm_df_edit[-c(18),]
+row.names(jm_df_edit) = jm_row_names
+
+value_slope_df = jm_df_edit
+#write.csv(value_slope_df, "value_slope.csv")
+
+```
+
+Area
+```{r}
+
+jm_df_edit = insertRows(jm_df_edit,c(16,17),new=other_vars_row)
+row.names(jm_df_edit) = jm_row_names
+area_df = jm_df_edit
+#write.csv(area_df, "area.csv")
+
+```
+
+```{r}
+waics = c(jointFit13_545_jun19_value[["fit_stats"]][["marginal"]][["WAIC"]],jointFit13_545_jun19_value_slope[["fit_stats"]][["marginal"]][["WAIC"]],jointFit13_545_jun19_area[["fit_stats"]][["marginal"]][["WAIC"]])
+
+dics = c(jointFit13_545_jun19_value[["fit_stats"]][["marginal"]][["DIC"]],jointFit13_545_jun19_value_slope[["fit_stats"]][["marginal"]][["DIC"]],jointFit13_545_jun19_area[["fit_stats"]][["marginal"]][["DIC"]])
+
+lpml = c(jointFit13_545_jun19_value[["fit_stats"]][["marginal"]][["LPML"]],jointFit13_545_jun19_value_slope[["fit_stats"]][["marginal"]][["LPML"]],jointFit13_545_jun19_area[["fit_stats"]][["marginal"]][["LPML"]])
+
+jm_fit_metrics=rbind(waics,dics,lpml)
+colnames(jm_fit_metrics) = c("Current Value", "Current Value + Slope", "Normalized Area")
+
+#write.csv(jm_fit_metrics,"jm_fit_metrics.csv")
+
+final_jm_summary_table = data.frame(cbind(value_df,value_slope_df,area_df))
+
+final_jm_summary_table = subset(final_jm_summary_table,select=-c(jm_sig,jm_sig.1,jm_sig.2))
+colnames(final_jm_summary_table) = c("HR (95% CI)","P value","HR (95% CI)","P value","HR (95% CI)","P value")
+
+final_jm_summary_table
+write.csv(final_jm_summary_table,"final_jm_summary_table.csv")
+```
+
+Draw out driving pressure longitudinal profiles for 4 different patients. 
+
+```{r}
+patients = sample(unique(jmbayes_longitudinal_data$origEMPI),3)
+patients = c("100544994","104219025","115268454","100968128")
+dp_patient_sample = subset(jmbayes_longitudinal_data,origEMPI %in% patients)
+dp_patient_sample = dp_patient_sample[,c('origEMPI','vent_hour','driving_pressure')]
+dp_patient_sample = na.omit(dp_patient_sample)
+dp_patient_sample = subset(dp_patient_sample,vent_hour<=200)
+
+#"102570071"
+
+names <- c(
+                    "100544994" = "Patient 1",
+                    "104219025" = "Patient 3",
+                    "115268454" = "Patient 4",
+                    "100968128" = "Patient 2"
+              
+                    )
+```
+
+```{r}
+p = ggplot(dp_patient_sample,aes(x=vent_hour,y=driving_pressure)) + geom_point() + geom_smooth(method="lm",
+   formula=  y ~ splines::ns(x, 3),size=2) + facet_wrap(~origEMPI,labeller = as_labeller(names),ncol=4) + xlab('Ventilator Hour') + ylab('Driving Pressure') + theme(strip.text = element_text(size=20), axis.title.y = element_text(size = rel(1.8)), axis.title.x = element_text(size = rel(1.8)),axis.text = element_text(size=15))
+
+p
+
+png(file="plots/longitudinal_profiles.png",height=2000,width=3200, res= 300)
+p
+dev.off()
+```
+
+Correlations Table
+
+```{r}
+RT_pplat$posix_time_hour = as.POSIXct(RT_pplat$RecordedDTS,format="%Y-%m-%d %H")
+RT_pplat2 = RT_pplat[,c('origEMPI','posix_time_hour','RT_pplat')]
+colnames(RT_pplat2)[2]= 'posix_time'
+jmbayes_longitudinal_data = jmbayes_longitudinal_data %>% left_join (RT_pplat2,by=c('origEMPI','posix_time'))
+
+```
+
+```{r}
+cor(jmbayes_longitudinal_data$driving_pressure,jmbayes_longitudinal_data$oxygen_saturation,use = 'complete.obs')
+
+```
+
+```{r}
+library("Hmisc")
+corr_data = jmbayes_longitudinal_data[,c(6:8,13:15,23)]
+res2 <- rcorr(as.matrix(corr_data))
+res2=data.frame(res2$r)
+
+res2 = round(res2,2)
+
+var_names = c("Driving Pressure","SpO2","Respiratory Rate","PF Ratio","PaCO2","Arterial pH","TV/PBW")
+colnames(res2) = var_names
+rownames(res2) = var_names
+write.csv(res2,"correlations_544.csv")
+```
+
+```{r}
+jmbayes_longitudinal_data = jmbayes_longitudinal_data %>% left_join(status,by='MRN','MRNSiteCD')
+jmbayes_longitudinal_data_alive = subset(jmbayes_longitudinal_data,status==0)
+jmbayes_longitudinal_data_dead = subset(jmbayes_longitudinal_data,status==1)
+
+summary(jmbayes_longitudinal_data$tv_pbw)
+summary(jmbayes_longitudinal_data_alive$tv_pbw)
+summary(jmbayes_longitudinal_data_dead$tv_pbw)
+
+wilcox.test(jmbayes_longitudinal_data_alive$tv_pbw,jmbayes_longitudinal_data_dead$tv_pbw)
+```
+
+Making histogram plot
+
+```{r}
+device_means = final_surv_vars_only %>% group_by(MRN,MRNSiteCD)    %>% dplyr::summarise(across(c("driving_pressure","oxygen_saturation","respiratory_rate","tidal_volume","pf_ratio","PaCO2"), ~ mean(.x,na.rm=TRUE)))
+
+device_means= device_means %>% left_join(origEMPI_mrn,by=c("MRN","MRNSiteCD"))
+device_means = device_means %>% left_join(static_demographics[,c("origEMPI","status")], by=c("origEMPI"))
+device_means$status[device_means$status==1] ="dead"
+device_means$status[device_means$status==0] ="alive"
+
+
+```
+
+```{r}
+jmbayes_longitudinal_data$status = as.factor(jmbayes_longitudinal_data$status)
+dp_hist = ggplot(jmbayes_longitudinal_data, aes(x=driving_pressure, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Driving Pressure (cmH2O)") + theme(axis.title = element_text(size=10))
+dp_hist
+```
+
+```{r}
+rr_hist=ggplot(jmbayes_longitudinal_data, aes(x=respiratory_rate, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Respiratory Rate (breaths/min)") + theme(axis.title = element_text(size=10))
+rr_hist
+
+
+spo2_hist=ggplot(jmbayes_longitudinal_data, aes(x=oxygen_saturation, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Oxygen Saturation (%)") + theme(axis.title = element_text(size=10)) 
+spo2_hist
+
+
+tv_hist=ggplot(jmbayes_longitudinal_data, aes(x=tv_pbw, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Tidal Volume per PBW (mL/kg") + theme(axis.title = element_text(size=10))
+tv_hist
+
+pf_hist=ggplot(jmbayes_longitudinal_data, aes(x=pf_ratio, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("PaO2/Fio2 Ratio") +theme(axis.title = element_text(size=10))+xlim(0,1000)
+pf_hist
+
+paco2_hist=ggplot(jmbayes_longitudinal_data, aes(x=PaCO2, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("PaCO2 (mmHG)")+ theme(axis.title = element_text(size=10))
+paco2_hist
+
+```
+
+```{r}
+png("device_plots.png",width=800,res=120)
+ggarrange(dp_hist, spo2_hist, rr_hist, tv_hist,pf_hist,paco2_hist,
+          labels = c("a", "b", "c","d","e","f"),
+          ncol = 3, nrow = 2,common.legend = TRUE, legend="bottom") 
+dev.off()
+dev.set(dev.next())
+
+
+```
