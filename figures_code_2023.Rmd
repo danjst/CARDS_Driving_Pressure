@@ -1,0 +1,329 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Figure 2 plot (static and dynamic correlation)
+
+```{r,message=F}
+
+library(imputeTS)
+library(dplyr)
+library(tidyverse)
+library(seastests)
+library(mtsdi)
+library(funtimes)
+library(survival)
+library(dynpred)
+library(Amelia)
+library(pec)
+library(stringr)
+library(lubridate)
+library(MASS)
+library(glmnet)
+library(JMbayes2)
+library(forestplot)
+library(ggpubr)
+```
+
+```{r}
+RT_dynamic_pplat = read.csv("RT_dynamic_pplat.csv")
+final_data = read.csv("longitudinal_data_2023.csv")
+final_data$origEMPI = as.character(final_data$origEMPI)
+final_data$posix_time = as.POSIXct(final_data$posix_time,format="%m/%d/%y %H:%M")
+
+max(RT_dynamic_pplat$RT_pplat)
+RT_dynamic_pplat_new = RT_dynamic_pplat
+RT_dynamic_pplat_new$origEMPI = as.character(RT_dynamic_pplat_new$origEMPI)
+RT_dynamic_pplat_new$posix_time = as.POSIXct(RT_dynamic_pplat_new$posix_time)
+
+RT_dynamic_pplat_new = RT_dynamic_pplat_new %>% left_join(final_data[,c('origEMPI','posix_time','VENT_PRESS_AWAY_END_EXP_POS')])
+
+
+#RT_dynamic_pplat_new = subset(RT_dynamic_pplat_new,RT_pplat <= 80)
+
+
+```
+
+
+```{r}
+
+ RT_dynamic_pplat_new = RT_dynamic_pplat_new %>% 
+  group_by(origEMPI) %>% 
+  fill(VENT_PRESS_AWAY_END_EXP_POS) %>% #default direction down
+  fill(VENT_PRESS_AWAY_END_EXP_POS, .direction = "up")
+
+
+RT_dynamic_pplat_new = na.omit(RT_dynamic_pplat_new)
+
+length(unique(RT_dynamic_pplat_new$origEMPI))
+```
+
+
+```{r}
+
+newdata <- RT_dynamic_pplat[order(RT_dynamic_pplat$posix_time),]
+newdata$origEMPI = as.character(newdata$origEMPI)
+newdata$posix_time=as.POSIXct(newdata$posix_time)
+newdata$posix_time = round(newdata$posix_time,"hour")
+newdata$posix_time=as.POSIXct(newdata$posix_time, format = "%Y-%m%-d %H")
+final_data$origEMPI = as.character(final_data$origEMPI)
+newdata = newdata %>% left_join(final_data[,c('origEMPI','VENT_PRESS_AWAY_END_EXP_POS','posix_time')])
+#newdata = subset(newdata,origEMPI %in% patients)
+
+```
+
+```{r}
+ newdata = newdata %>% 
+  group_by(origEMPI) %>% 
+  fill(VENT_PRESS_AWAY_END_EXP_POS) %>% #default direction down
+  fill(VENT_PRESS_AWAY_END_EXP_POS, .direction = "up")
+ 
+
+```
+
+```{r}
+ 
+newdata = na.omit(newdata)
+
+newdata$static_dp = newdata$RT_pplat - newdata$VENT_PRESS_AWAY_END_EXP_POS
+newdata$dynamic_dp = newdata$dynamic_pplat - newdata$VENT_PRESS_AWAY_END_EXP_POS
+
+newdata = subset(newdata, (static_dp >0) & (dynamic_dp > 0))
+
+newdata = subset(newdata, (static_dp <40) & (dynamic_dp < 40))
+```
+
+
+```{r}
+
+p = ggplot(newdata, aes(x = static_dp, y = dynamic_dp) ) +
+     geom_point() +
+     geom_smooth(method = "lm", se = FALSE) + xlab("Static Driving Pressure (cm H2O)") + ylab("Dynamic Driving Pressure (cm H2O)") + stat_cor(method="pearson")
+
+p 
+png(filename="plots/correlation_plot.png",height=1200,width=2000, res=300)
+plot(p)
+dev.off()
+
+```
+
+
+```{r}
+
+
+
+#static_demographics %>% group_by(DeathFLG) %>% summarise(mean_base_dp = mean(mean_baseline_dp))
+
+tv_pbw_559 = subset(jmbayes_longitudinal_data,select = c('origEMPI','posix_time','tv_pbw'))
+tv_pbw_559 = na.omit(tv_pbw_559)
+
+baseline_tv_pbw = aggregate(tv_pbw_559$tv_pbw, by=list(tv_pbw_559$origEMPI), FUN=last)
+
+colnames(baseline_tv_pbw) = c('origEMPI','first_hour_tv_pbw')
+
+baseline_tv_pbw = baseline_tv_pbw %>% left_join(static_demographics,by="origEMPI")
+
+baseline_tv_pbw %>% group_by(DeathFLG) %>% summarise(mean_base_tvpbw = mean(first_hour_tv_pbw))
+```
+
+
+```{r}
+
+require(rms)
+
+dd <- datadist(baseline_tv_pbw); options(datadist=NULL)
+f <- cph(Surv(hours, status) ~ rcs(first_hour_tv_pbw,6), data=baseline_tv_pbw)
+dd$limits["Adjust to","first_hour_tv_pbw"] = 6 ;options(datadist="dd")
+ggplot(Predict(f,fun=exp,ref.zero=TRUE),colfill = "red") +ylab("HR per 1 ml/kg increase in TV/PBW") + xlab("Mean TV/PBW (ml/kg)") + geom_hline(yintercept=1, linetype="dashed", 
+                color = "black", size=0.3) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) + xlim(4,10) + ylim(0,5)
+
+
+
+
+```
+
+# instead of initial TV/PBW, try total mean TV/PBW per patient
+
+```{r}
+
+total_mean_tv_pbw = jmbayes_longitudinal_data %>% group_by(origEMPI) %>% summarise(total_mean_tv_pbw = mean(tv_pbw,na.rm=T))
+total_mean_tv_pbw = total_mean_tv_pbw %>% left_join(static_demographics,by="origEMPI")
+
+
+```
+
+```{r}
+require(rms)
+
+dd <- datadist(total_mean_tv_pbw); options(datadist=NULL)
+f <- cph(Surv(hours, status) ~ rcs(total_mean_tv_pbw,6), data=total_mean_tv_pbw)
+dd$limits["Adjust to","total_mean_tv_pbw"] = 6 ;options(datadist="dd")
+ggplot(Predict(f,fun=exp,ref.zero=TRUE),colfill = "red") +ylab("Hazard Ratio") + xlab("Mean TV/PBW (ml/kg)") + geom_hline(yintercept=1, linetype="dashed", 
+                color = "black", size=0.3) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) +xlim(4.1,8)
+
+
+
+
+
+```
+
+
+```{r}
+ggplot(jmbayes_longitudinal_data, aes(x=pf_ratio)) + geom_histogram(color="black", fill="white",breaks = seq(0, 1700, by = 50))  + xlab("PF Ratio") +ggtitle("PF Ratio") + theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+
+```{r}
+ggplot(jmbayes_longitudinal_data, aes(x=tv_pbw)) + geom_histogram(color="black", fill="white",breaks = seq(0, 20, by = 0.5)) + xlab("TV/PBW (ml/kg)") +ggtitle("TV/PBW") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r}
+ggplot(jmbayes_longitudinal_data, aes(x=tidal_volume)) + geom_histogram(color="black", fill="white",breaks = seq(0, 1500, by = 50)) + xlab("Tidal Volume (ml)") +ggtitle("Tidal Volume") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+```{r}
+hist(jmbayes_longitudinal_data$tv_pbw)
+
+all_tv_pbw = jmbayes_longitudinal_data[,c("origEMPI","tv_pbw")]
+all_tv_pbw = na.omit(all_tv_pbw)
+colnames(all_tv_pbw) = c("origEMPI","tv_pbw")
+last_tv_pbw = aggregate(all_tv_pbw$tv_pbw, by=list(all_tv_pbw$origEMPI), FUN=last)
+colnames(last_tv_pbw) = c("origEMPI","tv_pbw")
+
+last_tv_pbw = last_tv_pbw %>% left_join(static_demographics[,c("origEMPI","status")])
+
+last_tv_pbw %>% group_by(status) %>% summarise(ave=median(tv_pbw))
+```
+
+
+Draw out driving pressure longitudinal profiles for 4 different patients. 
+
+```{r}
+patients = sample(unique(jmbayes_longitudinal_data$origEMPI),3)
+patients = c("100544994","104219025","115268454","100968128")
+dp_patient_sample = subset(jmbayes_longitudinal_data,origEMPI %in% patients)
+dp_patient_sample = dp_patient_sample[,c('origEMPI','vent_hour','driving_pressure')]
+dp_patient_sample = na.omit(dp_patient_sample)
+dp_patient_sample = subset(dp_patient_sample,vent_hour<=200)
+
+#"102570071"
+
+names <- c(
+                    "100544994" = "Patient 1",
+                    "104219025" = "Patient 3",
+                    "115268454" = "Patient 4",
+                    "100968128" = "Patient 2"
+              
+                    )
+```
+
+```{r}
+ggplot(dp_patient_sample,aes(x=vent_hour,y=driving_pressure)) + geom_point() + geom_smooth(method="lm",
+   formula=  y ~ splines::ns(x, 3),size=2) + facet_wrap(~origEMPI,labeller = as_labeller(names),ncol=4) + xlab('Ventilator Hour') + ylab('Driving Pressure')
+
+```
+
+Correlations Table
+
+```{r}
+RT_pplat$posix_time_hour = as.POSIXct(RT_pplat$RecordedDTS,format="%Y-%m-%d %H")
+RT_pplat2 = RT_pplat[,c('origEMPI','posix_time_hour','RT_pplat')]
+colnames(RT_pplat2)[2]= 'posix_time'
+jmbayes_longitudinal_data = jmbayes_longitudinal_data %>% left_join (RT_pplat2,by=c('origEMPI','posix_time'))
+
+```
+
+```{r}
+cor(jmbayes_longitudinal_data$driving_pressure,jmbayes_longitudinal_data$oxygen_saturation,use = 'complete.obs')
+
+```
+
+```{r}
+library("Hmisc")
+corr_data = jmbayes_longitudinal_data[,c(6:8,13:15,23)]
+res2 <- rcorr(as.matrix(corr_data))
+res2=data.frame(res2$r)
+
+res2 = round(res2,2)
+
+var_names = c("Driving Pressure","SpO2","Respiratory Rate","PF Ratio","PaCO2","Arterial pH","TV/PBW")
+colnames(res2) = var_names
+rownames(res2) = var_names
+write.csv(res2,"correlations_544.csv")
+```
+
+```{r}
+jmbayes_longitudinal_data = jmbayes_longitudinal_data %>% left_join(status,by='MRN','MRNSiteCD')
+jmbayes_longitudinal_data_alive = subset(jmbayes_longitudinal_data,status==0)
+jmbayes_longitudinal_data_dead = subset(jmbayes_longitudinal_data,status==1)
+
+summary(jmbayes_longitudinal_data$tv_pbw)
+summary(jmbayes_longitudinal_data_alive$tv_pbw)
+summary(jmbayes_longitudinal_data_dead$tv_pbw)
+
+wilcox.test(jmbayes_longitudinal_data_alive$tv_pbw,jmbayes_longitudinal_data_dead$tv_pbw)
+```
+
+Making histogram plot
+
+```{r}
+device_means = final_surv_vars_only %>% group_by(MRN,MRNSiteCD)    %>% dplyr::summarise(across(c("driving_pressure","oxygen_saturation","respiratory_rate","tidal_volume","pf_ratio","PaCO2"), ~ mean(.x,na.rm=TRUE)))
+
+device_means= device_means %>% left_join(origEMPI_mrn,by=c("MRN","MRNSiteCD"))
+device_means = device_means %>% left_join(static_demographics[,c("origEMPI","status")], by=c("origEMPI"))
+device_means$status[device_means$status==1] ="dead"
+device_means$status[device_means$status==0] ="alive"
+
+
+```
+
+```{r}
+jmbayes_longitudinal_data$status = as.factor(jmbayes_longitudinal_data$status)
+dp_hist = ggplot(jmbayes_longitudinal_data, aes(x=driving_pressure, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Driving Pressure (cmH2O)") + theme(axis.title = element_text(size=10))
+dp_hist
+```
+
+```{r}
+rr_hist=ggplot(jmbayes_longitudinal_data, aes(x=respiratory_rate, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Respiratory Rate (breaths/min)") + theme(axis.title = element_text(size=10))
+rr_hist
+
+
+spo2_hist=ggplot(jmbayes_longitudinal_data, aes(x=oxygen_saturation, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Oxygen Saturation (%)") + theme(axis.title = element_text(size=10)) 
+spo2_hist
+
+
+tv_hist=ggplot(jmbayes_longitudinal_data, aes(x=tv_pbw, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("Tidal Volume per PBW (mL/kg") + theme(axis.title = element_text(size=10))
+tv_hist
+
+pf_hist=ggplot(jmbayes_longitudinal_data, aes(x=pf_ratio, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("PaO2/Fio2 Ratio") +theme(axis.title = element_text(size=10))+xlim(0,1000)
+pf_hist
+
+paco2_hist=ggplot(jmbayes_longitudinal_data, aes(x=PaCO2, fill = status)) + 
+  geom_histogram(alpha = 0.5) + xlab("PaCO2 (mmHG)")+ theme(axis.title = element_text(size=10))
+paco2_hist
+
+```
+
+```{r}
+png("device_plots.png",width=800,res=120)
+ggarrange(dp_hist, spo2_hist, rr_hist, tv_hist,pf_hist,paco2_hist,
+          labels = c("a", "b", "c","d","e","f"),
+          ncol = 3, nrow = 2,common.legend = TRUE, legend="bottom") 
+dev.off()
+dev.set(dev.next())
+
+
+```
