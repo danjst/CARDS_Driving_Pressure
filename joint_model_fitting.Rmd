@@ -1,5 +1,11 @@
 ```{r}
-static_demographics = read.csv("static_demographics_2023.csv")
+library(JMbayes2)
+
+```
+
+
+```{r}
+static_demographics = read.csv("static_data.csv")
 
 jmbayes_longitudinal_data = read.csv("longitudinal_data.csv")
 
